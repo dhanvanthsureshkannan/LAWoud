@@ -1,18 +1,29 @@
-"""Local Markdown knowledge base: parse, index, search, sufficiency gate.
+"""Local Markdown knowledge corpus: parse, index, search, sufficiency gate.
 
-Designed to work on PLAIN markdown with nothing but headings — metadata lines
-are an optional scoring boost, never a requirement, since the real knowledge
-file is supplied by the user after this is built. Hot-reloads on file mtime
-change so the file can be swapped mid-demo without restarting the server.
+Two files are loaded side by side and searched as one corpus:
+
+* the Constitution of India file, which has no Markdown headings and is parsed
+  per-Article by :mod:`app.services.constitution_parser`;
+* a heading-structured guide file (``data/legal_knowledge.md``) covering the
+  procedural topics the Constitution does not — FIR filing, tenancy, cheque
+  bounce and so on — parsed by the generic heading parser below.
+
+The generic parser works on PLAIN markdown with nothing but headings; metadata
+lines are an optional scoring boost, never a requirement. Both files hot-reload
+independently on mtime change, so either can be swapped mid-demo without a
+restart.
 """
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 
 from app.config import Settings
 from app.core.text import normalize
+from app.services import constitution_parser
 
 logger = logging.getLogger("lawoud.knowledge_service")
 
@@ -22,6 +33,12 @@ _META_RE = re.compile(r"^\*\*(Topic|Keywords|Law|Source)\s*:?\s*\*\*\s*:?\s*(.*\
 _FIELD_WEIGHTS = {"title": 3.0, "meta_keywords": 2.5, "meta_topic": 2.0, "body": 1.0}
 _MAX_BODY_HITS_PER_TERM = 3
 _PHRASE_MATCH_BONUS = 2.0
+
+# A query naming an Article explicitly ("what does Article 21 say") must return
+# that Article itself, not the dozens of sections that merely cross-reference it.
+# This has to outweigh any accumulation of ordinary keyword hits.
+_ARTICLE_EXACT_BONUS = 25.0
+_ARTICLE_MENTION_RE = re.compile(r"\b(?:article|art\.?)\s*(\d+[A-Za-z]{0,3})\b", re.IGNORECASE)
 
 
 @dataclass
@@ -35,6 +52,11 @@ class KnowledgeSection:
     law: str = ""
     source_name: str = ""
     source_url: str | None = None
+    # Which file this came from, so the frontend can tell a constitutional
+    # Article apart from a procedural how-to note.
+    corpus: str = "guide"
+    article_number: str = ""  # constitution corpus only, e.g. "22", "51A(a)"
+    status: str = ""  # constitution corpus only, e.g. "Active", "Omitted / Historical"
 
     @property
     def citation_label(self) -> str:
@@ -48,19 +70,49 @@ class ScoredSection:
     coverage: float  # fraction of query keywords matched anywhere in this section
 
 
+class KnowledgeSource:
+    """One Markdown file plus the parser that understands its layout."""
+
+    def __init__(self, path: Path, parser: Callable[[str], list[KnowledgeSection]], label: str):
+        self.path = path
+        self.parser = parser
+        self.label = label
+        self.sections: list[KnowledgeSection] = []
+        self.mtime: float | None = None
+
+
 class KnowledgeService:
     def __init__(self, settings: Settings):
         self._settings = settings
-        self._sections: list[KnowledgeSection] = []
-        self._mtime: float | None = None
         self._last_loaded: datetime | None = None
+        self._sources: list[KnowledgeSource] = [
+            KnowledgeSource(
+                settings.constitution_path,
+                constitution_parser.parse,
+                constitution_parser.CORPUS_NAME,
+            ),
+            KnowledgeSource(
+                settings.knowledge_path,
+                lambda text: self._parse(text, settings.knowledge_max_section_chars),
+                "guide",
+            ),
+        ]
         self.reload_if_changed()
 
     # -- public API -----------------------------------------------------
 
     @property
+    def _sections(self) -> list[KnowledgeSection]:
+        return [s for source in self._sources for s in source.sections]
+
+    @property
     def section_count(self) -> int:
         return len(self._sections)
+
+    @property
+    def section_counts(self) -> dict[str, int]:
+        """Per-file section counts, so a mis-parsed file is obvious at a glance."""
+        return {source.label: len(source.sections) for source in self._sources}
 
     @property
     def last_loaded(self) -> datetime | None:
@@ -68,36 +120,59 @@ class KnowledgeService:
 
     @property
     def file_exists(self) -> bool:
-        return self._settings.knowledge_path.exists()
+        """True only when every configured source file is present."""
+        return all(source.path.exists() for source in self._sources)
 
     @property
     def file_mtime(self) -> datetime | None:
-        if self._mtime is None:
-            return None
-        return datetime.fromtimestamp(self._mtime, tz=timezone.utc)
+        """Most recent mtime across all sources."""
+        mtimes = [s.mtime for s in self._sources if s.mtime is not None and s.mtime > 0]
+        return datetime.fromtimestamp(max(mtimes), tz=timezone.utc) if mtimes else None
+
+    @property
+    def file_paths(self) -> list[str]:
+        return [str(source.path) for source in self._sources]
 
     def reload_if_changed(self) -> bool:
-        """Re-parse the knowledge file if it changed on disk. Returns True if reloaded."""
-        path = self._settings.knowledge_path
-        if not path.exists():
-            if self._sections:
-                logger.warning("Knowledge file %s no longer exists; keeping last-loaded data.", path)
+        """Re-parse any source file that changed on disk. True if anything reloaded."""
+        reloaded = any([self._reload_source(source) for source in self._sources])
+        if reloaded:
+            self._last_loaded = datetime.now(timezone.utc)
+        return reloaded
+
+    def _reload_source(self, source: KnowledgeSource) -> bool:
+        if not source.path.exists():
+            if source.sections:
+                logger.warning(
+                    "Knowledge file %s no longer exists; keeping last-loaded data.", source.path
+                )
+            elif source.mtime is None:
+                # Log the miss once, not on every request that calls reload.
+                source.mtime = -1.0
+                logger.warning("Knowledge file %s not found; that source is empty.", source.path)
             return False
 
-        mtime = path.stat().st_mtime
-        if self._mtime is not None and mtime == self._mtime:
+        mtime = source.path.stat().st_mtime
+        if source.mtime is not None and mtime == source.mtime:
             return False
 
         try:
-            text = path.read_text(encoding="utf-8")
+            text = source.path.read_text(encoding="utf-8")
         except OSError as e:
-            logger.error("Failed to read knowledge file %s: %s", path, e)
+            logger.error("Failed to read knowledge file %s: %s", source.path, e)
             return False
 
-        self._sections = self._parse(text, self._settings.knowledge_max_section_chars)
-        self._mtime = mtime
-        self._last_loaded = datetime.now(timezone.utc)
-        logger.info("Loaded %d knowledge sections from %s", len(self._sections), path)
+        try:
+            source.sections = source.parser(text)
+        except Exception:
+            # A malformed file must not take the rest of the corpus down with it.
+            logger.exception(
+                "Failed to parse knowledge file %s; keeping previous sections.", source.path
+            )
+            return False
+
+        source.mtime = mtime
+        logger.info("Loaded %d %s sections from %s", len(source.sections), source.label, source.path)
         return True
 
     def search(self, keywords: list[str], *, top_k: int | None = None) -> list[ScoredSection]:
@@ -111,9 +186,21 @@ class KnowledgeService:
         if not norm_keywords:
             return []
 
+        wanted_articles = self._articles_mentioned(norm_keywords)
+
         scored: list[ScoredSection] = []
         for section in self._sections:
+            # Never surface a repealed Article. Presenting removed text as live
+            # law is the most damaging mistake this system could make, so the
+            # filter lives here rather than in a prompt instruction.
+            if not self._settings.include_omitted_articles and constitution_parser.is_omitted_status(
+                section.status
+            ):
+                continue
             score, coverage = self._score_section(section, norm_keywords)
+            if section.article_number and section.article_number.lower() in wanted_articles:
+                score += _ARTICLE_EXACT_BONUS
+                coverage = 1.0
             if score > 0:
                 scored.append(ScoredSection(section=section, score=score, coverage=coverage))
 
@@ -133,6 +220,17 @@ class KnowledgeService:
         )
 
     # -- scoring ----------------------------------------------------------
+
+    @staticmethod
+    def _articles_mentioned(norm_keywords: list[str]) -> set[str]:
+        """Article numbers named explicitly in the query, e.g. {"21", "51a"}.
+
+        The analysis stage often splits "Article 21" into two keywords, so the
+        joined keyword string is searched rather than each keyword alone.
+        """
+        return {
+            m.group(1).lower() for m in _ARTICLE_MENTION_RE.finditer(" ".join(norm_keywords))
+        }
 
     def _score_section(
         self, section: KnowledgeSection, norm_keywords: list[str]
