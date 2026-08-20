@@ -52,7 +52,6 @@
 
     legalHelpModal: $('#legalHelpModal'),
     legalHelpModalClose: $('#legalHelpModalClose'),
-    legalHelpCtaBtn: $('#legalHelpCtaBtn'),
 
     chatHistoryModal: $('#chatHistoryModal'),
     chatHistoryModalClose: $('#chatHistoryModalClose'),
@@ -1247,7 +1246,6 @@
     });
 
     // Legal Help
-    DOM.legalHelpCtaBtn.addEventListener('click', openLegalHelp);
     DOM.legalHelpModalClose.addEventListener('click', closeAllModals);
 
     // Chat History Modal
