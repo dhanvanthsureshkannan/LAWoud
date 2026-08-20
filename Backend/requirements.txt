@@ -1,0 +1,20 @@
+# LAWoud backend — hackathon build (localhost)
+# Python 3.10+
+
+# --- Web framework ---
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+
+# --- Validation / config ---
+pydantic==2.13.4
+pydantic-settings==2.15.0
+python-dotenv==1.2.3
+
+# --- AI providers ---
+google-genai==2.19.0          # primary  (Gemini)
+groq==1.6.0                   # fallback (Groq)
+
+# --- Retrieval ---
+tavily-python==0.7.27         # whitelisted web search
+httpx==0.28.1                 # direct fetch of official .gov.in documents only
+pypdf==6.16.1                 # text extraction from official DLSA/SLSA panel PDFs

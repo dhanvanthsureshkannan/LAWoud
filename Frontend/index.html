@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description"
+    content="LAWoud — Your AI-powered Constitutional & Legal Awareness Assistant for Indian citizens. Understand your rights in simple language.">
+  <meta name="theme-color" content="#05080D">
+  <title>LAWoud — Constitutional & Legal Awareness AI</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23D89B3C' stroke-width='2'><path d='M12 2L2 7l10 5 10-5-10-5z'/><path d='M2 17l10 5 10-5'/><path d='M2 12l10 5 10-5'/></svg>">
+</head>
+
+<body>
+  <div class="app" id="app">
+
+    <!-- ======================== SIDEBAR ======================== -->
+    <aside class="sidebar" id="sidebar" role="navigation" aria-label="Main navigation">
+      <!-- Logo -->
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <div class="logo-icon">
+            <!-- Justice Scale SVG -->
+            <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M18 2v28M10 8h16M6 8l4 12h0a6 6 0 0012 0h0l4-12" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" fill="none" />
+              <path d="M6 20c0 3.3 2.7 4 4 4s4-.7 4-4" stroke="currentColor" stroke-width="2" fill="none" />
+              <path d="M22 20c0 3.3 2.7 4 4 4s4-.7 4-4" stroke="currentColor" stroke-width="2" fill="none" />
+              <path d="M12 30h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </div>
+          <span class="logo-text"><span class="law">LAW</span><span class="oud">oud</span></span>
+        </div>
+        <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="Collapse sidebar"
+          title="Collapse sidebar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- New Chat Button -->
+      <button class="new-chat-btn" id="newChatSidebar" aria-label="Start new chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        New Chat
+      </button>
+
+      <!-- Navigation -->
+      <nav class="sidebar-nav" aria-label="Features">
+        <button class="nav-item active" data-nav="chat" aria-label="Chat Assistant">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          Chat Assistant
+        </button>
+        <button class="nav-item" data-nav="history" aria-label="Chat History">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          Chat History
+        </button>
+        <button class="nav-item" data-nav="rights" aria-label="Know Your Rights">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </svg>
+          Know Your Rights
+        </button>
+        <button class="nav-item" data-nav="constitution" aria-label="Constitution">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            <line x1="8" y1="7" x2="16" y2="7" />
+            <line x1="8" y1="11" x2="14" y2="11" />
+          </svg>
+          Constitution
+        </button>
+        <button class="nav-item" data-nav="findlaw" aria-label="Find a Law">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          Find a Law
+        </button>
+        <button class="nav-item" data-nav="legalaid" aria-label="Legal Aid">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          Legal Aid
+        </button>
+        <button class="nav-item" data-nav="docexplainer" aria-label="Document Explainer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+          </svg>
+          Document Explainer
+        </button>
+      </nav>
+
+      <!-- Recent Chats -->
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Recent Chats</div>
+      </div>
+      <div class="recent-chats" id="recentChats" role="list" aria-label="Recent conversations">
+        <!-- Rendered dynamically by script.js -->
+      </div>
+
+
+      <!-- Account -->
+      <div class="sidebar-account">
+        <div class="account-dropdown" id="accountDropdown" role="menu" aria-label="Account menu">
+          <button class="dropdown-item" role="menuitem" data-action="profile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            Profile
+          </button>
+          <button class="dropdown-item" role="menuitem" data-action="settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+            Settings
+          </button>
+
+          <button class="dropdown-item logout" role="menuitem" data-action="logout">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+            Logout
+          </button>
+        </div>
+        <button class="account-btn" id="accountBtn" aria-label="Account menu" aria-haspopup="true"
+          aria-expanded="false">
+          <div class="account-avatar" aria-hidden="true">A</div>
+          <span class="account-name">Saisanjay Suresh</span>
+          <span class="account-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Sidebar overlay for mobile -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- ======================== MAIN CONTENT ======================== -->
+    <main class="main" id="mainContent" role="main">
+      <!-- Courtroom Background -->
+      <div class="courtroom-bg" aria-hidden="true"></div>
+      <div class="courtroom-overlay" aria-hidden="true"></div>
+      <div class="courtroom-glow" aria-hidden="true"></div>
+
+      <!-- Header -->
+      <header class="main-header">
+        <div class="header-left">
+          <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open menu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+          <div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <h1 class="header-title" id="headerTitle"><span class="law">LAW</span><span class="oud" style="color:var(--gold);">oud</span></h1>
+              <span class="header-badge" aria-label="Verified">
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </span>
+            </div>
+            <p class="header-subtitle" id="headerSubtitle">Your Constitutional & Legal Awareness Assistant</p>
+          </div>
+        </div>
+        <div class="header-right">
+
+          <button class="header-btn hide-mobile" id="shareBtn" aria-label="Share chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+              <polyline points="16 6 12 2 8 6" />
+              <line x1="12" y1="2" x2="12" y2="15" />
+            </svg>
+            <span>Share</span>
+          </button>
+          <button class="header-btn hide-mobile" id="saveChatBtn" aria-label="Save chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+            <span>Save Chat</span>
+          </button>
+          <button class="header-btn primary hidden" id="newChatHeader" aria-label="New Chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="16" />
+              <line x1="8" y1="12" x2="16" y2="12" />
+            </svg>
+            <span>New Chat</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Chat Area -->
+      <div class="chat-area" id="chatArea">
+        <!-- Welcome State -->
+        <div class="welcome-state" id="welcomeState">
+          <h2 class="welcome-title">Hello! I'm <span class="law">LAW</span><span class="oud">oud</span></h2>
+          <div class="welcome-divider" aria-hidden="true">
+            <span class="line"></span>
+            <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M18 4v24M11 10h14M7 10l4 10h0a5 5 0 0010 0h0l4-10" stroke="currentColor" stroke-width="1.5"
+                stroke-linecap="round" fill="none" />
+              <path d="M7 20c0 2.8 2.2 3.5 4 3.5s4-.7 4-3.5" stroke="currentColor" stroke-width="1.5" fill="none" />
+              <path d="M21 20c0 2.8 2.2 3.5 4 3.5s4-.7 4-3.5" stroke="currentColor" stroke-width="1.5" fill="none" />
+              <path d="M13 28h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+            <span class="line"></span>
+          </div>
+          <p class="welcome-subtitle">Your Constitutional & Legal Awareness Assistant</p>
+        </div>
+
+        <!-- Chat Messages Container -->
+        <div class="chat-messages hidden" id="chatMessages" role="log" aria-label="Chat messages" aria-live="polite">
+          <!-- Messages are injected here dynamically -->
+        </div>
+      </div>
+
+      <!-- Chat Input -->
+      <div class="chat-input-area">
+        <div class="chat-input-wrapper">
+          <div class="attached-file" id="attachedFile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            <span id="attachedFileName">document.pdf</span>
+            <button class="remove-file" id="removeFileBtn" aria-label="Remove attached file">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <div class="chat-input-row">
+            <button class="input-action-btn" id="attachBtn" aria-label="Attach document" title="Attach a document">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path
+                  d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              </svg>
+            </button>
+            <textarea class="chat-input" id="chatInput" rows="1" placeholder="Type your legal question here..."
+              aria-label="Type your legal question" autocomplete="off"></textarea>
+            <button class="input-action-btn" id="micBtn" aria-label="Voice input" title="Use voice input">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+            </button>
+            <button class="send-btn" id="sendBtn" aria-label="Send message" title="Send">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+                stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ======================== MODALS ======================== -->
+
+  <!-- Modal Overlay -->
+  <div class="modal-overlay" id="modalOverlay"></div>
+
+  <!-- Share Modal -->
+  <div class="modal" id="shareModal" role="dialog" aria-label="Share chat" aria-modal="true">
+    <div class="modal-header">
+      <h2>Share Chat</h2>
+      <button class="modal-close" id="shareModalClose" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p>Share this conversation with others by copying the link below.</p>
+      <div class="share-link-row">
+        <input type="text" class="share-link-input" id="shareLinkInput" value="https://lawoud.app/chat/abc123" readonly
+          aria-label="Share link">
+        <button class="share-copy-btn" id="shareCopyBtn">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Legal Help Modal -->
+  <div class="modal" id="legalHelpModal" role="dialog" aria-label="Get Legal Help" aria-modal="true">
+    <div class="modal-header">
+      <h2>Get Legal Help</h2>
+      <button class="modal-close" id="legalHelpModalClose" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p>Some situations are better handled with a qualified legal professional. Choose an option below:</p>
+      <div class="modal-options">
+        <button class="modal-option" aria-label="Find Legal Aid">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          <span>Find Legal Aid</span>
+        </button>
+        <button class="modal-option" aria-label="Find a Lawyer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <span>Find a Lawyer</span>
+        </button>
+        <button class="modal-option" aria-label="Contact Relevant Authority">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          </svg>
+          <span>Relevant Authority</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat History Modal -->
+  <div class="modal" id="chatHistoryModal" role="dialog" aria-label="Chat History" aria-modal="true">
+    <div class="modal-header">
+      <h2>Chat History</h2>
+      <button class="modal-close" id="chatHistoryModalClose" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p>Your previous conversations:</p>
+      <div class="history-list" id="historyList">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast" role="status" aria-live="polite">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+      stroke-linejoin="round">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+      <polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
+    <span id="toastMessage">Saved successfully</span>
+  </div>
+
+  <!-- Hidden file input for attachments -->
+  <input type="file" id="fileInput" class="hidden" accept=".pdf,.doc,.docx,.txt,.jpg,.png" aria-hidden="true">
+
+  <script src="script.js"></script>
+</body>
+
+</html>

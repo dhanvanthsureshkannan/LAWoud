@@ -1,0 +1,60 @@
+{
+  "national": [
+    {
+      "name": "NALSA (National Legal Services Authority)",
+      "description": "Provides free legal aid to eligible citizens and coordinates State/District Legal Services Authorities across India.",
+      "contact": "Toll-free helpline: 15100",
+      "url": "https://nalsa.gov.in/",
+      "scope": "national"
+    },
+    {
+      "name": "Tele-Law",
+      "description": "Free legal advice via video/telephone consultation with panel lawyers, run by the Department of Justice.",
+      "contact": null,
+      "url": "https://www.tele-law.in/",
+      "scope": "national"
+    },
+    {
+      "name": "NyayaBandhu (Pro Bono Legal Services)",
+      "description": "Connects eligible citizens with pro bono advocates registered with the Department of Justice.",
+      "contact": null,
+      "url": "https://nyayabandhu.gov.in/",
+      "scope": "national"
+    },
+    {
+      "name": "eCourts Services",
+      "description": "Official portal for case status, cause lists, and court information across District and High Courts. Advocate/case search requires completing a CAPTCHA on the official site.",
+      "contact": null,
+      "url": "https://services.ecourts.gov.in/ecourtindia_v6/",
+      "scope": "national"
+    },
+    {
+      "name": "National Commission for Women (NCW)",
+      "description": "Complaints and legal guidance cell for women facing harassment, domestic violence, or workplace issues.",
+      "contact": "Helpline: 7827170170",
+      "url": "https://ncw.nic.in/",
+      "scope": "national"
+    },
+    {
+      "name": "National Cyber Crime Reporting Portal",
+      "description": "Report cybercrime, including financial fraud and online harassment, directly to law enforcement.",
+      "contact": "Cyber helpline: 1930",
+      "url": "https://cybercrime.gov.in/",
+      "scope": "national"
+    },
+    {
+      "name": "Senior Citizens Helpline (Elder Line)",
+      "description": "Support and legal guidance for senior citizens, including maintenance and property matters.",
+      "contact": "Helpline: 14567",
+      "url": "https://socialjustice.gov.in/",
+      "scope": "national"
+    },
+    {
+      "name": "National Consumer Helpline",
+      "description": "Assistance and guidance for consumer complaints before approaching the Consumer Commission (NCDRC).",
+      "contact": "Helpline: 1915",
+      "url": "https://ncdrc.nic.in/",
+      "scope": "national"
+    }
+  ]
+}
