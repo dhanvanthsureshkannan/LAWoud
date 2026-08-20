@@ -31,6 +31,12 @@ STANDARD_DISCLAIMER = (
     "Please verify credentials independently before engaging any advocate."
 )
 
+DIRECTORY_DISCLAIMER = (
+    "Advocates listed from LAWoud's curated directory of publicly reported professional "
+    "profiles — not a live search of court records, and not a ranking of lawyer quality. "
+    "Please verify credentials independently before engaging any advocate."
+)
+
 # Used when the search returned no advocates. The standard disclaimer claims
 # advocates *were* identified, which would contradict an empty result.
 NO_RESULTS_DISCLAIMER = (

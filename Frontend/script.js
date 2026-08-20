@@ -115,7 +115,14 @@
     },
     currentChatId: null,
     currentMessages: [],
+    conversationId: null, // backend session id for the multi-turn intake flow
+    streaming: false,
+    abortController: null,
   };
+
+  // Backend base URL. Override by setting window.LAWOUD_API_BASE before this
+  // script loads (e.g. a <script> tag) if the API isn't on localhost:8000.
+  const API_BASE = window.LAWOUD_API_BASE || 'http://127.0.0.1:8000';
 
   // ======================== LEGAL CONTENT DATA ========================
   const LEGAL_CONTENT = {
@@ -432,6 +439,12 @@
   }
 
   function switchToWelcome() {
+    if (state.abortController) {
+      state.abortController.abort();
+      state.abortController = null;
+    }
+    state.streaming = false;
+    state.conversationId = null;
     state.currentView = 'welcome';
     state.currentChatId = null;
     state.currentMessages = [];
@@ -498,7 +511,8 @@
   }
 
   // ======================== MESSAGES ========================
-  function addMessage(type, text) {
+  function addMessage(type, text, opts) {
+    opts = opts || {};
     const time = getCurrentTime();
     const msg = { type, text, time };
     state.currentMessages.push(msg);
@@ -506,6 +520,13 @@
     if (state.currentChatId && state.conversations[state.currentChatId]) {
       state.conversations[state.currentChatId].messages = state.currentMessages;
       saveLocalConversations();
+    }
+
+    if (opts.skipDom) {
+      // The streaming path (streamChatResponse) already rendered this bubble
+      // live as chunks arrived — this call exists only to record it into
+      // history/localStorage, not to render it again.
+      return;
     }
 
     const isLast = type === 'ai';
@@ -722,7 +743,7 @@
   // ======================== SEND MESSAGE ========================
   function sendMessage() {
     const text = DOM.chatInput.value.trim();
-    if (!text) return;
+    if (!text || state.streaming) return;
 
     if (state.currentView !== 'chat') {
       switchToChat();
@@ -730,6 +751,7 @@
 
     DOM.chatInput.value = '';
     DOM.chatInput.style.height = 'auto';
+    DOM.chatInput.placeholder = 'Ask a follow-up question...';
     removeAttachment();
 
     if (state.currentChatId === null) {
@@ -745,18 +767,299 @@
     }
 
     addMessage('user', text);
+    streamChatResponse(text);
+  }
 
-    // Show typing then AI response
-    setTimeout(() => {
-      showTypingIndicator();
-      const delay = 800 + Math.random() * 1200;
-      setTimeout(() => {
+  // ======================== LIVE BACKEND STREAMING ========================
+  // Everything below talks to the real LAWoud API (see Backend/README.md for
+  // the SSE event contract) and replaces the old canned DEMO_RESPONSES cycle
+  // for real conversation turns. The sidebar's "Know Your Rights" etc. demo
+  // buttons still use startDemoChat()/DEMO_RESPONSES untouched — those are
+  // decorative shortcuts, not the chat path.
+
+  function setSendEnabled(enabled) {
+    DOM.sendBtn.disabled = !enabled;
+    DOM.sendBtn.classList.toggle('is-disabled', !enabled);
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function inlineMarkdown(s) {
+    return escapeHtml(s)
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\[(\d+)\]/g, '<sup class="citation-ref">[$1]</sup>');
+  }
+
+  // Minimal markdown: paragraphs + "- "/"* " bullet lists + **bold** + [n]
+  // citation markers. Enough for the answer style the backend prompts ask
+  // for, without pulling in a full markdown library for a hackathon UI.
+  function renderMarkdownLite(text) {
+    const lines = (text || '').split('\n');
+    let html = '';
+    let listBuffer = [];
+    const flushList = () => {
+      if (listBuffer.length) {
+        html += `<ul>${listBuffer.map(li => `<li>${inlineMarkdown(li)}</li>`).join('')}</ul>`;
+        listBuffer = [];
+      }
+    };
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) { flushList(); return; }
+      const bullet = trimmed.match(/^[-*]\s+(.*)$/);
+      if (bullet) {
+        listBuffer.push(bullet[1]);
+      } else {
+        flushList();
+        html += `<p>${inlineMarkdown(trimmed)}</p>`;
+      }
+    });
+    flushList();
+    return html;
+  }
+
+  function createAiMessageShell() {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message ai';
+    wrapper.innerHTML = `
+      <div class="message-avatar" aria-hidden="true">
+        <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M18 4v24M11 10h14M7 10l4 10h0a5 5 0 0010 0h0l4-10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+          <path d="M7 20c0 2.8 2.2 3.5 4 3.5s4-.7 4-3.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          <path d="M21 20c0 2.8 2.2 3.5 4 3.5s4-.7 4-3.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
+          <path d="M13 28h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="message-content">
+        <div class="message-bubble"></div>
+        <div class="message-extras"></div>
+      </div>
+    `;
+    DOM.chatMessages.appendChild(wrapper);
+    return {
+      wrapper,
+      bubbleEl: wrapper.querySelector('.message-bubble'),
+      extrasEl: wrapper.querySelector('.message-extras'),
+    };
+  }
+
+  function renderCitations(container, citations, origin) {
+    if (!citations || !citations.length) return;
+    const originLabel = origin === 'web' ? 'Official web sources' : origin === 'local' ? 'Local knowledge base' : 'Sources';
+    const box = document.createElement('div');
+    box.className = 'citation-box';
+    box.innerHTML = `<div class="citation-label">${escapeHtml(originLabel)}</div>` +
+      citations.map(c => `
+        <div class="citation-chip">
+          <span class="citation-chip-id">[${c.id}]</span>
+          <span class="citation-chip-body">
+            <span class="citation-chip-title">${escapeHtml(c.title)}</span>
+            <span class="citation-chip-source">${escapeHtml(c.source)}</span>
+          </span>
+        </div>
+      `).join('');
+    container.appendChild(box);
+  }
+
+  function renderSkipChip(container, onSkip) {
+    const row = document.createElement('div');
+    row.className = 'skip-chip-row';
+    row.innerHTML = `<button class="skip-chip" type="button">Just answer with what I've told you</button>`;
+    row.querySelector('button').addEventListener('click', () => {
+      row.remove();
+      onSkip();
+    });
+    container.appendChild(row);
+  }
+
+  function renderAssistance(container, data) {
+    const box = document.createElement('div');
+    box.className = 'assistance-card';
+    let html = `<div class="assistance-header">Legal Assistance${data.location ? ' — ' + escapeHtml(data.location) : ''}</div>`;
+
+    if (data.advocate_data_available && data.advocates && data.advocates.length) {
+      html += data.advocates.map(a => `
+        <div class="advocate-row">
+          <div class="advocate-name">${escapeHtml(a.name)}</div>
+          <div class="advocate-meta">${escapeHtml(a.relevant_area)}${a.court_or_jurisdiction ? ' — ' + escapeHtml(a.court_or_jurisdiction) : ''}</div>
+          <div class="advocate-reason">${escapeHtml(a.relevance_reason)}</div>
+        </div>
+      `).join('');
+    } else if (data.reason) {
+      html += `<p class="assistance-reason">${escapeHtml(data.reason)}</p>`;
+    }
+
+    if (data.legal_aid && data.legal_aid.length) {
+      html += `<div class="legal-aid-label">Free / official legal-aid contacts</div>`;
+      html += data.legal_aid.slice(0, 4).map(item => `
+        <div class="legal-aid-row"><strong>${escapeHtml(item.name)}</strong>${item.contact ? ' — ' + escapeHtml(item.contact) : ''}</div>
+      `).join('');
+    }
+
+    if (data.manual_search_url) {
+      html += `<p class="assistance-manual"><a href="${escapeHtml(data.manual_search_url)}" target="_blank" rel="noopener noreferrer">Manual eCourts search (official, CAPTCHA required)</a></p>`;
+    }
+    if (data.disclaimer) {
+      html += `<p class="assistance-disclaimer">${escapeHtml(data.disclaimer)}</p>`;
+    }
+
+    box.innerHTML = html;
+    container.appendChild(box);
+  }
+
+  function historyForApi() {
+    // The just-sent user message is already the LAST entry in currentMessages
+    // (addMessage pushed it before streamChatResponse was called); the API's
+    // `question` field carries that one, so history is everything before it.
+    return state.currentMessages
+      .slice(0, -1)
+      .map(m => ({ role: m.type === 'user' ? 'user' : 'assistant', content: m.text }));
+  }
+
+  async function streamChatResponse(question) {
+    state.streaming = true;
+    setSendEnabled(false);
+    showTypingIndicator();
+
+    const controller = new AbortController();
+    state.abortController = controller;
+
+    let shell = null;
+    let fullText = '';
+    let pendingCitations = null;
+    let doneData = null;
+    let questionData = null;
+
+    const ensureShell = () => {
+      if (!shell) {
         removeTypingIndicator();
-        const response = DEMO_RESPONSES[demoResponseIndex % DEMO_RESPONSES.length];
-        demoResponseIndex++;
-        addMessage('ai', response);
-      }, delay);
-    }, 300);
+        shell = createAiMessageShell();
+        if (pendingCitations) {
+          renderCitations(shell.extrasEl, pendingCitations.citations, pendingCitations.origin);
+          pendingCitations = null;
+        }
+      }
+      return shell;
+    };
+
+    try {
+      const history = historyForApi();
+      const resp = await fetch(`${API_BASE}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          history: history.length ? history : null,
+          conversation_id: state.conversationId,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!resp.ok || !resp.body) {
+        throw new Error(`Server returned HTTP ${resp.status}`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let sepIndex;
+        while ((sepIndex = buffer.indexOf('\n\n')) !== -1) {
+          const rawEvent = buffer.slice(0, sepIndex);
+          buffer = buffer.slice(sepIndex + 2);
+          if (!rawEvent || rawEvent.startsWith(':')) continue; // heartbeat/comment
+
+          let eventName = 'message';
+          let dataLine = '';
+          rawEvent.split('\n').forEach(line => {
+            if (line.startsWith('event:')) eventName = line.slice(6).trim();
+            else if (line.startsWith('data:')) dataLine += line.slice(5).trim();
+          });
+          if (!dataLine) continue;
+
+          let data;
+          try { data = JSON.parse(dataLine); } catch { continue; }
+
+          if (eventName === 'status') {
+            setTypingStatus(data.message);
+          } else if (eventName === 'sources') {
+            if (data.citations && data.citations.length) {
+              pendingCitations = data;
+            }
+          } else if (eventName === 'chunk') {
+            const s = ensureShell();
+            fullText += data.text;
+            s.bubbleEl.innerHTML = renderMarkdownLite(fullText);
+            scrollToBottom();
+          } else if (eventName === 'question') {
+            questionData = data;
+          } else if (eventName === 'assistance') {
+            const s = ensureShell();
+            renderAssistance(s.extrasEl, data);
+            scrollToBottom();
+          } else if (eventName === 'done') {
+            doneData = data;
+          } else if (eventName === 'error') {
+            const s = ensureShell();
+            fullText += `\n\n[${data.message || 'An error occurred.'}]`;
+            s.bubbleEl.innerHTML = renderMarkdownLite(fullText);
+          }
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        const s = ensureShell();
+        fullText += `\n\n[Connection error: ${err.message}. Is the LAWoud backend running at ${API_BASE}?]`;
+        s.bubbleEl.innerHTML = renderMarkdownLite(fullText);
+      }
+    }
+
+    removeTypingIndicator();
+    state.streaming = false;
+    state.abortController = null;
+    setSendEnabled(true);
+
+    if (!shell) {
+      // Nothing streamed at all (e.g. connection failed before any chunk).
+      shell = ensureShell();
+    }
+
+    if (doneData && doneData.conversation_id) {
+      state.conversationId = doneData.conversation_id;
+    }
+
+    // A clarification question still renders as normal bubble text (the
+    // backend also sends it as a `chunk`), plus a Skip control so the user
+    // isn't forced to keep answering follow-ups they don't want to.
+    if (questionData && questionData.can_skip) {
+      renderSkipChip(shell.extrasEl, () => {
+        DOM.chatInput.value = "Skip — just answer with what I've told you";
+        sendMessage();
+      });
+    }
+
+    if (doneData && doneData.awaiting === 'location') {
+      DOM.chatInput.placeholder = 'District and state, e.g. "Vellore, Tamil Nadu"...';
+    }
+
+    addMessage('ai', fullText, { skipDom: true });
+
+    if (shell && doneData) {
+      setTimeout(() => {
+        addLegalCTAs();
+        scrollToBottom();
+      }, 150);
+    }
   }
 
   // ======================== TYPING INDICATOR ========================
@@ -776,9 +1079,15 @@
       <div class="typing-dots" aria-label="LAWoud is typing">
         <span></span><span></span><span></span>
       </div>
+      <span class="typing-status" id="typingStatus"></span>
     `;
     DOM.chatMessages.appendChild(indicator);
     scrollToBottom();
+  }
+
+  function setTypingStatus(message) {
+    const label = $('#typingStatus');
+    if (label) label.textContent = message || '';
   }
 
   function removeTypingIndicator() {

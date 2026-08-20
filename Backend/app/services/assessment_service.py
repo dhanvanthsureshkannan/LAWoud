@@ -33,6 +33,22 @@ _URGENCY_PATTERNS = [
 ]
 _URGENCY_RE = re.compile("|".join(_URGENCY_PATTERNS), re.IGNORECASE)
 
+# Phrasing that marks a question as hypothetical/general rather than a real,
+# ongoing incident — "can I kick my friend?" must not trigger urgency just
+# because the answer explaining assault law uses the word "assault".
+_HYPOTHETICAL_RE = re.compile(
+    r"^(can i|could i|is it legal|is it illegal|what happens if|what if|"
+    r"what is|what are|am i allowed|do i have the right)\b",
+    re.IGNORECASE,
+)
+# A first-person incident marker overrides the hypothetical read even if the
+# question also opens with hypothetical phrasing ("what happens if — I was
+# actually arrested last night" should still count as real).
+_FIRST_PERSON_INCIDENT_RE = re.compile(
+    r"\b(i was|i've been|i have been|i got|they arrested me|against me|filed against me)\b",
+    re.IGNORECASE,
+)
+
 _INSUFFICIENT_INFO_MARKERS = (
     "don't have enough verified information",
     "not enough information",
@@ -52,16 +68,24 @@ def assess_professional_help(
 
     Deliberately not triggered for every question — only when at least one of:
     - the analysis stage already flagged an urgency signal, or
-    - the question or answer contains an urgency/severity marker, or
+    - the QUESTION itself contains an urgency/severity marker and isn't merely
+      hypothetical, or
     - the answer itself says the available information was insufficient
       (a genuinely unresolved question is exactly when a human expert helps).
+
+    Urgency is checked against the question only, never the answer — an answer
+    that explains assault law in the abstract will naturally contain the word
+    "assault" even when the question was a hypothetical ("can I kick my
+    friend?"), and that must not read as a real incident needing a lawyer.
     """
     if analysis.professional_help_signal:
         return True
 
-    combined = f"{question}\n{answer}"
-    if _URGENCY_RE.search(combined):
-        return True
+    if _URGENCY_RE.search(question):
+        is_hypothetical = bool(_HYPOTHETICAL_RE.search(question.strip()))
+        is_first_person_incident = bool(_FIRST_PERSON_INCIDENT_RE.search(question))
+        if not is_hypothetical or is_first_person_incident:
+            return True
 
     answer_lower = answer.lower()
     if any(marker in answer_lower for marker in _INSUFFICIENT_INFO_MARKERS):
