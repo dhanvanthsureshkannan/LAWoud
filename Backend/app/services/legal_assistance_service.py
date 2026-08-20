@@ -8,7 +8,7 @@ import logging
 
 from app.config import PROJECT_ROOT
 from app.core.domains import ECOURTS_ADVOCATE_SEARCH_URL
-from app.core.wording import NO_RESULTS_DISCLAIMER, STANDARD_DISCLAIMER, assert_clean
+from app.core.wording import DIRECTORY_DISCLAIMER, NO_RESULTS_DISCLAIMER, STANDARD_DISCLAIMER, assert_clean
 from app.models.schemas import (
     LegalAidResource,
     LegalAssistanceRequest,
@@ -18,6 +18,7 @@ from app.models.schemas import (
 from app.services import location_service
 from app.services.advocate_service import find_advocates
 from app.services.ai.ai_service import AIService
+from app.services.lawyer_directory_service import LawyerDirectoryService
 from app.services.web_search_service import WebSearchService
 
 logger = logging.getLogger("lawoud.legal_assistance_service")
@@ -25,7 +26,9 @@ logger = logging.getLogger("lawoud.legal_assistance_service")
 _LEGAL_AID_PATH = PROJECT_ROOT / "data" / "legal_aid_directory.json"
 
 
-def _load_national_legal_aid() -> list[LegalAidResource]:
+def load_national_legal_aid() -> list[LegalAidResource]:
+    """Public: also used directly by orchestrator's AWAITING_LOCATION skip path,
+    which needs the national list with no district/state resolved at all."""
     with open(_LEGAL_AID_PATH, encoding="utf-8") as f:
         data = json.load(f)
     return [LegalAidResource(**item) for item in data.get("national", [])]
@@ -36,8 +39,9 @@ async def get_legal_assistance(
     *,
     ai_service: AIService,
     web_search_service: WebSearchService,
+    lawyer_directory_service: LawyerDirectoryService,
 ) -> LegalAssistanceResponse:
-    legal_aid = _load_national_legal_aid()
+    legal_aid = load_national_legal_aid()
 
     # Users type locations inconsistently ("vellore ", "tamilnadu"), so tidy the
     # input before matching or displaying it.
@@ -108,6 +112,23 @@ async def get_legal_assistance(
             results=results,
             legal_aid=legal_aid,
             disclaimer=STANDARD_DISCLAIMER,
+        )
+
+    # --- Curated directory fallback (city-only match; see module docstring) ---
+    directory_results, directory_scope = lawyer_directory_service.find(
+        district=district,
+        legal_category=request.legal_category,
+        case_type=request.case_type,
+    )
+    if directory_results:
+        return LegalAssistanceResponse(
+            legal_topic=request.legal_topic,
+            location=location_label,
+            match_scope=directory_scope,
+            advocate_data_available=True,
+            results=directory_results,
+            legal_aid=legal_aid,
+            disclaimer=DIRECTORY_DISCLAIMER,
         )
 
     # --- Never fabricate: no advocates found at any search tier -----------

@@ -105,6 +105,23 @@ def is_valid_state(name: str) -> bool:
     return resolve_state(name) is not None
 
 
+def parse_location_text(text: str) -> tuple[str, str | None]:
+    """Split a free-text chat reply like "Vellore, Tamil Nadu" into
+    (district, state_or_None). Used by the orchestrator's inline
+    AWAITING_LOCATION turn, where the user types a location as a normal chat
+    message rather than filling a form field.
+
+    Only a comma (the natural way people write "district, state") is treated
+    as a separator; a bare "Vellore" is passed through as district-only and
+    left to `infer_state` to resolve.
+    """
+    cleaned = text.strip()
+    if "," in cleaned:
+        district, _, state = cleaned.partition(",")
+        return district.strip(), (state.strip() or None)
+    return cleaned, None
+
+
 def ambiguous_candidates(district: str) -> list[str] | None:
     """Returns candidate states if *district* is known to be ambiguous, else None."""
     key = normalize(district).replace(" ", "")

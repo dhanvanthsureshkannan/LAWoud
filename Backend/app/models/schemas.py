@@ -22,6 +22,34 @@ class Stage(str, Enum):
     SEARCHING_KNOWLEDGE = "searching_knowledge"
     SEARCHING_WEB = "searching_web"
     GENERATING = "generating"
+    FINDING_HELP = "finding_help"
+
+
+class Route(str, Enum):
+    """How the matter should be approached, decided at intake.
+
+    A divorce the user does not want is not answered the same way as an arrest:
+    the first needs counselling and reconciliation options offered before the
+    legal position, the second needs the law immediately.
+    """
+
+    LEGAL = "legal"
+    MORAL = "moral"
+    MIXED = "mixed"
+
+
+class ConversationPhase(str, Enum):
+    INTAKE = "intake"  # gathering context, one question at a time
+    ANSWERING = "answering"  # enough context; retrieve and answer
+    AWAITING_LOCATION = "awaiting_location"  # answered; need district/state for lawyer search
+    ASSISTANCE = "assistance"  # assistance delivered
+
+
+class Awaiting(str, Enum):
+    """What the frontend should expect the user to supply next."""
+
+    CLARIFICATION = "clarification"
+    LOCATION = "location"
 
 
 class ProviderName(str, Enum):
@@ -45,8 +73,18 @@ class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=4000)
     history: list[ChatMessage] | None = Field(
         default=None,
-        description="Prior turns for follow-up context. Backend is stateless; "
-        "the frontend resends this each call.",
+        description="Prior turns for follow-up context. The frontend resends this each call.",
+    )
+    conversation_id: str | None = Field(
+        default=None,
+        description="Returned in the first `done` event. Resend it on every later turn so the "
+        "server can continue the same intake — without it, each turn starts a fresh "
+        "conversation and the follow-up questions restart from scratch.",
+    )
+    skip_questions: bool = Field(
+        default=False,
+        description="Set by the frontend's Skip control: answer now with whatever context has "
+        "been gathered, asking nothing further.",
     )
 
 
@@ -83,6 +121,46 @@ class ProvidersUsed(BaseModel):
     answer: ProviderName = ProviderName.NONE
 
 
+class IntakeResult(BaseModel):
+    """One intake turn: what we now know, and the single next thing to ask."""
+
+    legal_topic: str = ""
+    legal_category: str = "other"
+    case_type: str = ""
+    intent: str = ""
+    keywords: list[str] = Field(default_factory=list)
+    route: Route = Route.LEGAL
+    route_reason: str = ""
+    slots_filled: dict[str, str] = Field(default_factory=dict)
+    next_question: str = ""
+    next_question_key: str = ""
+    sufficient: bool = True
+    professional_help_signal: bool = False
+
+
+class ClarificationQuestion(BaseModel):
+    """Payload of the `question` SSE event."""
+
+    text: str
+    question_key: str = ""
+    round: int
+    max_rounds: int
+    can_skip: bool = True
+
+
+class AssistancePayload(BaseModel):
+    """Payload of the `assistance` SSE event — the lawyer/legal-aid hand-off."""
+
+    location: str
+    match_scope: "MatchScope"
+    advocate_data_available: bool
+    advocates: list["AdvocateResult"] = Field(default_factory=list)
+    legal_aid: list["LegalAidResource"] = Field(default_factory=list)
+    disclaimer: str
+    reason: str | None = None
+    manual_search_url: str | None = None
+
+
 class ChatDone(BaseModel):
     professional_help_recommended: bool
     legal_topic: str
@@ -92,6 +170,14 @@ class ChatDone(BaseModel):
     citations: list[Citation] = Field(default_factory=list)
     origin: Origin
     providers: ProvidersUsed
+    conversation_id: str = ""
+    phase: ConversationPhase = ConversationPhase.INTAKE
+    route: Route = Route.LEGAL
+    awaiting: Awaiting | None = Field(
+        default=None,
+        description="Set when this turn ended on a question rather than an answer, so the "
+        "frontend knows the user's next message is a reply, not a new topic.",
+    )
 
 
 class ChatSyncResponse(BaseModel):
@@ -192,3 +278,14 @@ class KnowledgeStatusResponse(BaseModel):
     section_count: int
     last_loaded: str | None
     last_modified: str | None
+    file_paths: list[str] = Field(default_factory=list)
+    section_counts: dict[str, int] = Field(
+        default_factory=dict,
+        description="Sections per source file. A Constitution count near 128 instead of ~473 "
+        "means the per-Article parser did not engage and the file is being blind-chunked.",
+    )
+
+
+# AssistancePayload is declared above MatchScope/AdvocateResult/LegalAidResource so it
+# sits with the other chat events; resolve those forward references now that they exist.
+AssistancePayload.model_rebuild()

@@ -27,9 +27,11 @@ async def knowledge_status(
     """Debug aid while swapping in the real knowledge .md file."""
     knowledge_service.reload_if_changed()
     return KnowledgeStatusResponse(
-        file_path=str(settings.knowledge_path),
+        file_path=str(settings.constitution_path),
         exists=knowledge_service.file_exists,
         section_count=knowledge_service.section_count,
         last_loaded=knowledge_service.last_loaded.isoformat() if knowledge_service.last_loaded else None,
         last_modified=knowledge_service.file_mtime.isoformat() if knowledge_service.file_mtime else None,
+        file_paths=knowledge_service.file_paths,
+        section_counts=knowledge_service.section_counts,
     )

@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # heading-structured guide file for the procedural topics it doesn't cover.
     knowledge_file: str = "data/legal_knowledge.md"
     constitution_file: str = "General provisions all.md"
-    lawyer_directory_file: str = "data/lawyer_directory.md"
+    lawyer_directory_file: str = "LAWOUD_Lawyer_Directory final.md"
     # Repealed Articles stay parsed but out of retrieval unless this is turned on.
     include_omitted_articles: bool = False
     # Raised from the single-file defaults: with ~460 Article sections in the

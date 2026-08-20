@@ -7,12 +7,20 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
-from app.api.deps import get_ai_service, get_knowledge_service, get_web_search_service
+from app.api.deps import (
+    get_ai_service,
+    get_knowledge_service,
+    get_lawyer_directory_service,
+    get_session_store,
+    get_web_search_service,
+)
 from app.core.sse import sse_event, sse_heartbeat
 from app.models.schemas import ChatDone, ChatRequest, ChatSyncResponse, QueryAnalysis
 from app.services import orchestrator
 from app.services.ai.ai_service import AIService
 from app.services.knowledge_service import KnowledgeService
+from app.services.lawyer_directory_service import LawyerDirectoryService
+from app.services.session_store import SessionStore
 from app.services.web_search_service import WebSearchService
 
 logger = logging.getLogger("lawoud.api.chat")
@@ -26,6 +34,8 @@ async def _sse_stream(
     ai_service: AIService,
     knowledge_service: KnowledgeService,
     web_search_service: WebSearchService,
+    lawyer_directory_service: LawyerDirectoryService,
+    session_store: SessionStore,
 ) -> AsyncIterator[str]:
     queue: asyncio.Queue[str | None] = asyncio.Queue()
 
@@ -36,6 +46,8 @@ async def _sse_stream(
                 ai_service=ai_service,
                 knowledge_service=knowledge_service,
                 web_search_service=web_search_service,
+                lawyer_directory_service=lawyer_directory_service,
+                session_store=session_store,
             ):
                 await queue.put(sse_event(event.event, event.data))
         except Exception:
@@ -68,10 +80,16 @@ async def chat(
     ai_service: AIService = Depends(get_ai_service),
     knowledge_service: KnowledgeService = Depends(get_knowledge_service),
     web_search_service: WebSearchService = Depends(get_web_search_service),
+    lawyer_directory_service: LawyerDirectoryService = Depends(get_lawyer_directory_service),
+    session_store: SessionStore = Depends(get_session_store),
 ) -> StreamingResponse:
-    """Primary chat endpoint. Streams the full analyze -> retrieve -> answer flow as SSE."""
+    """Primary chat endpoint. Streams the full intake -> retrieve -> answer flow
+    (and, when warranted, the location hand-off) as SSE."""
     return StreamingResponse(
-        _sse_stream(request, ai_service, knowledge_service, web_search_service),
+        _sse_stream(
+            request, ai_service, knowledge_service, web_search_service,
+            lawyer_directory_service, session_store,
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -80,15 +98,21 @@ async def chat(
 @router.get("/stream")
 async def chat_stream_get(
     question: str,
+    conversation_id: str | None = None,
     ai_service: AIService = Depends(get_ai_service),
     knowledge_service: KnowledgeService = Depends(get_knowledge_service),
     web_search_service: WebSearchService = Depends(get_web_search_service),
+    lawyer_directory_service: LawyerDirectoryService = Depends(get_lawyer_directory_service),
+    session_store: SessionStore = Depends(get_session_store),
 ) -> StreamingResponse:
     """Same stream as POST /api/chat, but via GET so browsers can use EventSource
     directly (EventSource cannot send a POST body)."""
-    request = ChatRequest(question=question)
+    request = ChatRequest(question=question, conversation_id=conversation_id)
     return StreamingResponse(
-        _sse_stream(request, ai_service, knowledge_service, web_search_service),
+        _sse_stream(
+            request, ai_service, knowledge_service, web_search_service,
+            lawyer_directory_service, session_store,
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -100,6 +124,8 @@ async def chat_sync(
     ai_service: AIService = Depends(get_ai_service),
     knowledge_service: KnowledgeService = Depends(get_knowledge_service),
     web_search_service: WebSearchService = Depends(get_web_search_service),
+    lawyer_directory_service: LawyerDirectoryService = Depends(get_lawyer_directory_service),
+    session_store: SessionStore = Depends(get_session_store),
 ) -> ChatSyncResponse:
     """Same pipeline as POST /api/chat, drained into one JSON response.
     For testing or clients that don't want to handle SSE."""
@@ -112,6 +138,8 @@ async def chat_sync(
         ai_service=ai_service,
         knowledge_service=knowledge_service,
         web_search_service=web_search_service,
+        lawyer_directory_service=lawyer_directory_service,
+        session_store=session_store,
     ):
         if event.event == "analysis":
             analysis_data = event.data

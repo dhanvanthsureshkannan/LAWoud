@@ -10,6 +10,8 @@ from app.api.routes import chat, health, legal_assistance
 from app.config import settings
 from app.services.ai.ai_service import AIService
 from app.services.knowledge_service import KnowledgeService
+from app.services.lawyer_directory_service import LawyerDirectoryService
+from app.services.session_store import SessionStore
 from app.services.web_search_service import WebSearchService
 
 logging.basicConfig(
@@ -25,13 +27,20 @@ async def lifespan(app: FastAPI):
     app.state.ai_service = AIService(settings)
     app.state.knowledge_service = KnowledgeService(settings)
     app.state.web_search_service = WebSearchService(settings)
+    app.state.lawyer_directory_service = LawyerDirectoryService(settings.lawyer_directory_path)
+    app.state.session_store = SessionStore()
 
     logger.info("AI providers configured: %s", app.state.ai_service.configured_providers or "NONE")
     logger.info("Tavily configured: %s", settings.has_tavily)
     logger.info(
         "Knowledge base: %d sections loaded from %s",
         app.state.knowledge_service.section_count,
-        settings.knowledge_path,
+        app.state.knowledge_service.file_paths,
+    )
+    logger.info(
+        "Lawyer directory: %d entries loaded from %s",
+        app.state.lawyer_directory_service.entry_count,
+        settings.lawyer_directory_path,
     )
     if not app.state.ai_service.configured_providers:
         logger.warning(
