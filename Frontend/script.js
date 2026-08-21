@@ -1011,8 +1011,15 @@
             doneData = data;
           } else if (eventName === 'error') {
             const s = ensureShell();
-            fullText += `\n\n[${data.message || 'An error occurred.'}]`;
-            s.bubbleEl.innerHTML = renderMarkdownLite(fullText);
+            // A total-outage turn already streamed a plain-English explanation
+            // as a chunk, so appending the error text would say the same thing
+            // twice. An interrupted answer has NOT been explained — the bubble
+            // just stops mid-sentence — so there the notice must be appended.
+            const alreadyExplained = data.recoverable && fullText.trim();
+            if (!alreadyExplained) {
+              fullText += `${fullText.trim() ? '\n\n' : ''}[${data.message || 'An error occurred.'}]`;
+              s.bubbleEl.innerHTML = renderMarkdownLite(fullText);
+            }
           }
         }
       }

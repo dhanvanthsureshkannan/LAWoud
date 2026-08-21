@@ -312,6 +312,7 @@ async def _run_answer(
     full_answer = ""
     answer_provider = ProviderName.NONE
     stream_error: str | None = None
+    generated_nothing = False
     try:
         async for chunk, provider in stream_answer(
             ai_service, state.original_question, context_blocks, history_text,
@@ -323,13 +324,21 @@ async def _run_answer(
     except AnswerStreamError as e:
         full_answer = e.partial_text
         stream_error = str(e)
-        logger.error("Answer stream failed after partial delivery: %s", e)
+        generated_nothing = e.generated_nothing
+        logger.error("Answer stream failed (generated_nothing=%s): %s", generated_nothing, e)
 
     if stream_error:
-        yield PipelineEvent(
-            "error",
-            {"message": "The answer generation was interrupted before completing.", "recoverable": False},
-        )
+        # No answer was produced, so the professional-help assessment below is
+        # deliberately skipped: offering to find a lawyer for a question we
+        # never managed to answer is worse than saying nothing.
+        if generated_nothing:
+            message = (
+                "The AI service is temporarily unavailable or rate-limited, so no answer "
+                "could be generated. Please try again in a few minutes."
+            )
+        else:
+            message = "The answer generation was interrupted before completing."
+        yield PipelineEvent("error", {"message": message, "recoverable": generated_nothing})
         return
 
     state.last_answer = full_answer
