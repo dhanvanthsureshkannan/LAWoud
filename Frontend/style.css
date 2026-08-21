@@ -580,7 +580,20 @@ ul, ol {
   left: 0;
   right: 0;
   bottom: 0;
-  background-image: url('assets/courtroom-bg.png');
+  /* Pure-CSS courtroom ambience: warm light pooling from above against deep
+     wood tones, plus faint vertical banding for panelling. Drawn rather than
+     loaded so the app ships without a binary asset and never 404s. */
+  background-image:
+    radial-gradient(ellipse 80% 55% at 50% 0%, rgba(216, 155, 60, 0.28) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 50% 100%, rgba(90, 60, 28, 0.22) 0%, transparent 70%),
+    repeating-linear-gradient(
+      90deg,
+      rgba(60, 40, 20, 0.16) 0px,
+      rgba(60, 40, 20, 0.16) 2px,
+      transparent 2px,
+      transparent 64px
+    ),
+    linear-gradient(180deg, #0d1219 0%, #141a23 45%, #0a0e14 100%);
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;

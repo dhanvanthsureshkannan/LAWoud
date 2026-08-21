@@ -1,9 +1,9 @@
 """All request/response/event shapes. This is the frontend contract."""
 
 from enum import Enum
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 # =============================================================================
@@ -132,6 +132,34 @@ class IntakeResult(BaseModel):
     route: Route = Route.LEGAL
     route_reason: str = ""
     slots_filled: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("slots_filled", mode="before")
+    @classmethod
+    def _coerce_slot_values(cls, value: Any) -> Any:
+        """Accept whatever JSON shape the model puts in a slot.
+
+        Models routinely answer a yes/no slot with a real boolean
+        ({"warrant_shown": false}) or a list, and a strict dict[str, str] would
+        reject the entire intake result over it — which silently drops the turn
+        to the no-questions heuristic and makes the whole follow-up feature look
+        like model flakiness. Slot values are only ever fed back to the model as
+        text, so coercing here loses nothing.
+        """
+        if not isinstance(value, dict):
+            return {}
+        coerced: dict[str, str] = {}
+        for key, raw in value.items():
+            if raw is None:
+                continue
+            if isinstance(raw, bool):
+                coerced[str(key)] = "yes" if raw else "no"
+            elif isinstance(raw, (list, tuple)):
+                coerced[str(key)] = ", ".join(str(item) for item in raw)
+            elif isinstance(raw, dict):
+                coerced[str(key)] = "; ".join(f"{k}: {v}" for k, v in raw.items())
+            else:
+                coerced[str(key)] = str(raw)
+        return coerced
     next_question: str = ""
     next_question_key: str = ""
     sufficient: bool = True

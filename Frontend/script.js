@@ -208,16 +208,6 @@
     }
   };
 
-  // Demo AI responses for follow-up
-  const DEMO_RESPONSES = [
-    'Based on what you\'ve shared, there are a few additional points to consider.\n\nThe right to seek legal remedy is generally available to anyone who believes their rights may have been affected.\n\nYou may want to document the details of the incident while they are fresh in your memory.\n\nWould you like me to explain any specific aspect in more detail?',
-    'That\'s a good question.\n\nGenerally, the applicable laws may vary depending on the specific circumstances and jurisdiction.\n\nI can provide more information about the relevant legal provisions if you share additional details about your situation.\n\nRemember, this is general legal information, not professional legal advice.',
-    'I understand your concern.\n\nThere are several factors that may be relevant in this situation.\n\nThe key principles typically involve fundamental rights, procedural safeguards, and available remedies.\n\nWould you like me to elaborate on any of these aspects?',
-    'Thank you for providing that context.\n\nBased on the additional information, there may be specific provisions that are particularly relevant.\n\nIt\'s generally advisable to keep written records of all interactions and any correspondence related to the matter.\n\nShall I explain the steps you might consider taking?',
-    'I can help clarify that.\n\nIn Indian law, there are multiple layers of protection — constitutional rights, statutory provisions, and common law principles.\n\nThe applicability can depend on the specific facts of your case.\n\nWould you like me to break down any particular aspect further?'
-  ];
-
-  let demoResponseIndex = 0;
 
   // ======================== UTILITIES ========================
   function getCurrentTime() {
@@ -771,10 +761,9 @@
 
   // ======================== LIVE BACKEND STREAMING ========================
   // Everything below talks to the real LAWoud API (see Backend/README.md for
-  // the SSE event contract) and replaces the old canned DEMO_RESPONSES cycle
-  // for real conversation turns. The sidebar's "Know Your Rights" etc. demo
-  // buttons still use startDemoChat()/DEMO_RESPONSES untouched — those are
-  // decorative shortcuts, not the chat path.
+  // the SSE event contract). The sidebar's "Know Your Rights" etc. buttons are
+  // decorative shortcuts that replay a canned exchange via startDemoChat();
+  // they are not part of the chat path.
 
   function setSendEnabled(enabled) {
     DOM.sendBtn.disabled = !enabled;
@@ -797,8 +786,20 @@
   // Minimal markdown: paragraphs + "- "/"* " bullet lists + **bold** + [n]
   // citation markers. Enough for the answer style the backend prompts ask
   // for, without pulling in a full markdown library for a hackathon UI.
+  // Some models emit OpenAI-style citation markers (【1†L1-L4】) instead of the
+  // plain [1] the answer prompt asks for. Normalise them so the reference still
+  // renders as a citation rather than as literal garbage in the middle of a
+  // sentence. Safe to run on partial text: the stream re-renders the full
+  // accumulated string on every chunk, so a marker split across two chunks is
+  // converted as soon as it completes.
+  function normalizeCitationMarkers(text) {
+    return (text || '')
+      .replace(/【\s*(\d+)\s*[^】]*】/g, '[$1]')
+      .replace(/【|】/g, '');
+  }
+
   function renderMarkdownLite(text) {
-    const lines = (text || '').split('\n');
+    const lines = normalizeCitationMarkers(text).split('\n');
     let html = '';
     let listBuffer = [];
     const flushList = () => {

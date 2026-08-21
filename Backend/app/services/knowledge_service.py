@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.config import Settings
+from app.core.text import keywords as text_keywords
 from app.core.text import normalize
 from app.services import constitution_parser
 
@@ -38,6 +39,26 @@ _PHRASE_MATCH_BONUS = 2.0
 # that Article itself, not the dozens of sections that merely cross-reference it.
 # This has to outweigh any accumulation of ordinary keyword hits.
 _ARTICLE_EXACT_BONUS = 25.0
+# A section scoring below this fraction of the best match is dropped rather than
+# padded into the citation list.
+_RELATIVE_SCORE_FLOOR = 0.45
+# Component words of a multi-word keyword score at a discount, so a section
+# matching the whole phrase still outranks one matching a single stray word.
+_COMPONENT_WORD_WEIGHT = 0.5
+# An Article must clear this absolute score before it is force-kept in the
+# results, so a genuinely unrelated Article is never dragged into an answer.
+_ARTICLE_KEEP_MIN = 4.0
+# ...and match at least half the query terms. Score alone is not enough: a long
+# Article can accumulate points from one repeated stray word, which is how a
+# question about consumer refunds ends up citing export duty on jute.
+_ARTICLE_KEEP_MIN_COVERAGE = 0.5
+
+
+def _content_words(keyword: str) -> list[str]:
+    """Content words inside a multi-word keyword, stopwords removed."""
+    if " " not in keyword:
+        return []
+    return text_keywords(keyword, min_len=3)
 _ARTICLE_MENTION_RE = re.compile(r"\b(?:article|art\.?)\s*(\d+[A-Za-z]{0,3})\b", re.IGNORECASE)
 
 
@@ -197,15 +218,59 @@ class KnowledgeService:
                 section.status
             ):
                 continue
+            is_named_article = bool(section.article_number) and self._matches_wanted_article(
+                section.article_number, wanted_articles
+            )
+            # When the user names Articles explicitly, every OTHER Article is
+            # noise: plain keyword scoring matches "21" inside "214" and "215",
+            # so asking about Article 21 would cite "High Courts for States".
+            # Guide sections stay eligible — they cover what the Articles don't.
+            if wanted_articles and section.article_number and not is_named_article:
+                continue
+
             score, coverage = self._score_section(section, norm_keywords)
-            if section.article_number and section.article_number.lower() in wanted_articles:
+            if is_named_article:
                 score += _ARTICLE_EXACT_BONUS
                 coverage = 1.0
             if score > 0:
                 scored.append(ScoredSection(section=section, score=score, coverage=coverage))
 
         scored.sort(key=lambda s: s.score, reverse=True)
-        return scored[:top_k]
+
+        # Drop stragglers far weaker than the best match. Filling top_k
+        # regardless is what puts "Cheque Bounce" in the citation list of an
+        # answer about arrest: it scored above zero on one stray word, and a
+        # visibly irrelevant citation costs more trust than a shorter list.
+        # One strong section alone is a better answer than one strong section
+        # padded with an unrelated one, so there is no minimum count here.
+        ranked = scored
+        if scored:
+            floor = scored[0].score * _RELATIVE_SCORE_FLOOR
+            scored = [s for s in scored if s.score >= floor]
+
+        result = scored[:top_k]
+
+        # Grounding an answer in the Constitution is the point of this product,
+        # and the guide sections are written in plainer language so they tend to
+        # out-score the Article that actually governs the situation. If a
+        # relevant Article exists but got trimmed, make room for the best one.
+        if not any(s.section.article_number for s in result):
+            # Search the pre-floor ranking: the Article we want to restore is
+            # usually one the floor just trimmed.
+            best_article = next(
+                (
+                    s
+                    for s in ranked
+                    if s.section.article_number
+                    and s.score >= _ARTICLE_KEEP_MIN
+                    and s.coverage >= _ARTICLE_KEEP_MIN_COVERAGE
+                ),
+                None,
+            )
+            if best_article is not None:
+                result = (result[: top_k - 1] if top_k > 1 else []) + [best_article]
+
+        return result
 
     def is_sufficient(self, scored: list[ScoredSection]) -> bool:
         """Sufficiency gate deciding local-knowledge vs. web-search fallback."""
@@ -220,6 +285,25 @@ class KnowledgeService:
         )
 
     # -- scoring ----------------------------------------------------------
+
+    @staticmethod
+    def _matches_wanted_article(article_number: str, wanted: set[str]) -> bool:
+        """True if *article_number* is one the user named.
+
+        "21" matches Article 21 and its lettered relatives (21A), which are
+        genuinely part of the same provision, but never 214 or 215.
+        """
+        actual = article_number.lower()
+        base = re.sub(r"\(.*\)$", "", actual)  # "51a(a)" -> "51a"
+        for want in wanted:
+            if actual == want or base == want:
+                return True
+            # "21" should reach "21a", but never "214" or "224a" — the part
+            # after the number must be letters only, not more digits.
+            suffix = base[len(want):]
+            if base.startswith(want) and suffix and suffix.isalpha():
+                return True
+        return False
 
     @staticmethod
     def _articles_mentioned(norm_keywords: list[str]) -> set[str]:
@@ -243,20 +327,33 @@ class KnowledgeService:
         score = 0.0
         matched = 0
         for kw in norm_keywords:
+            # The analysis stage returns phrases as often as single words
+            # ("arrest without warrant", "rights of arrested person"). Matched
+            # as literal substrings those almost never appear verbatim in a
+            # section, so the very Articles they describe score zero. Score the
+            # phrase itself AND its content words; the keyword counts as covered
+            # if any of them lands, which keeps coverage per-keyword and honest.
+            variants = [kw] + [w for w in _content_words(kw) if w != kw]
             hit = False
-            if kw in title_norm:
-                score += _FIELD_WEIGHTS["title"]
-                hit = True
-            if any(kw == mk or kw in mk for mk in meta_kw_norm):
-                score += _FIELD_WEIGHTS["meta_keywords"]
-                hit = True
-            if kw in topic_norm:
-                score += _FIELD_WEIGHTS["meta_topic"]
-                hit = True
-            body_hits = min(body_norm.count(kw), _MAX_BODY_HITS_PER_TERM) if len(kw) >= 3 else 0
-            if body_hits:
-                score += _FIELD_WEIGHTS["body"] * body_hits
-                hit = True
+            for i, term in enumerate(variants):
+                # Full phrase at full weight, component words at a discount so a
+                # phrase match still outranks an incidental single-word match.
+                weight = 1.0 if i == 0 else _COMPONENT_WORD_WEIGHT
+                if term in title_norm:
+                    score += _FIELD_WEIGHTS["title"] * weight
+                    hit = True
+                if any(term == mk or term in mk for mk in meta_kw_norm):
+                    score += _FIELD_WEIGHTS["meta_keywords"] * weight
+                    hit = True
+                if term in topic_norm:
+                    score += _FIELD_WEIGHTS["meta_topic"] * weight
+                    hit = True
+                body_hits = (
+                    min(body_norm.count(term), _MAX_BODY_HITS_PER_TERM) if len(term) >= 3 else 0
+                )
+                if body_hits:
+                    score += _FIELD_WEIGHTS["body"] * body_hits * weight
+                    hit = True
             if hit:
                 matched += 1
 

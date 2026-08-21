@@ -11,6 +11,12 @@ from google.genai import types as genai_types
 
 from app.services.ai.base import AIProvider, AIProviderError
 
+# The SDK raises APIError for server-side failures, but plain ValueError /
+# TypeError for client-side ones (an unsupported schema keyword, a bad
+# argument). Both must become AIProviderError, otherwise the exception
+# escapes AIService and the Groq fallback never gets a turn.
+_PROVIDER_ERRORS = (genai_errors.APIError, ValueError, TypeError)
+
 # The SDK logs a WARNING on every generate_content call recommending AsyncChat
 # for automatic function calling. We don't use function calling at all, so the
 # advice doesn't apply and the noise obscures our own logs. Errors still surface.
@@ -31,7 +37,7 @@ class GeminiProvider(AIProvider):
                 contents=prompt,
                 config=genai_types.GenerateContentConfig(system_instruction=system),
             )
-        except genai_errors.APIError as e:
+        except _PROVIDER_ERRORS as e:
             raise AIProviderError(self.name, f"generate_text failed: {e}", cause=e) from e
         text = response.text
         if not text:
@@ -55,7 +61,7 @@ class GeminiProvider(AIProvider):
                     response_schema=schema,
                 ),
             )
-        except genai_errors.APIError as e:
+        except _PROVIDER_ERRORS as e:
             raise AIProviderError(self.name, f"generate_json failed: {e}", cause=e) from e
         text = response.text
         if not text:
@@ -71,14 +77,14 @@ class GeminiProvider(AIProvider):
                 contents=prompt,
                 config=genai_types.GenerateContentConfig(system_instruction=system),
             )
-        except genai_errors.APIError as e:
+        except _PROVIDER_ERRORS as e:
             raise AIProviderError(self.name, f"stream_text failed to start: {e}", cause=e) from e
 
         try:
             async for chunk in stream:
                 if chunk.text:
                     yield chunk.text
-        except genai_errors.APIError as e:
+        except _PROVIDER_ERRORS as e:
             raise AIProviderError(
                 self.name, f"stream_text failed mid-stream: {e}", cause=e
             ) from e

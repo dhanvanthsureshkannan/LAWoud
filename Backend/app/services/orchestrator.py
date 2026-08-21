@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.prompts import LOCATION_REQUEST_MESSAGE, build_history_text
+from app.core.text import keywords as extract_keywords
 from app.core.wording import NO_RESULTS_DISCLAIMER
 from app.models.schemas import (
     Awaiting,
@@ -253,7 +254,29 @@ async def _run_answer(
         {"stage": Stage.SEARCHING_KNOWLEDGE, "message": "Searching local legal knowledge base..."},
     )
 
-    scored_sections = knowledge_service.search(analysis.keywords)
+    # Two passes, most specific first. After a few clarifying questions the
+    # intake keywords drift onto the detail just discussed ("arrest without
+    # warrant", "Vellore police station") and stop matching the Article that
+    # actually governs the situation. Merging both sets into one query is worse,
+    # not better: coverage is measured across every keyword, so the extra terms
+    # drag the ratio below the sufficiency bar and push an answerable question
+    # out to the web. So try the precise set, and only if it falls short, retry
+    # with the user's own words before giving up on the local corpus.
+    search_keywords = list(analysis.keywords)
+    scored_sections = knowledge_service.search(search_keywords)
+    if not knowledge_service.is_sufficient(scored_sections):
+        original_keywords = extract_keywords(state.original_question, max_keywords=8)
+        # Decide sufficiency on the user's own words alone — a small, focused
+        # set gives an honest coverage ratio. Then retrieve across both sets,
+        # because the question's bare words ("got", "arrested", "police") rank
+        # Article 22 too low to survive on their own.
+        if knowledge_service.is_sufficient(knowledge_service.search(original_keywords)):
+            search_keywords = _dedupe(search_keywords + original_keywords)
+            scored_sections = knowledge_service.search(search_keywords)
+            logger.info(
+                "Local retry on the original question rescued %r", state.original_question[:60]
+            )
+
     origin = Origin.NONE
     context_blocks: list[str] = []
     citations: list[Citation] = []
@@ -268,7 +291,7 @@ async def _run_answer(
             "status",
             {"stage": Stage.SEARCHING_WEB, "message": "Local knowledge insufficient — searching approved official sources..."},
         )
-        query = " ".join(analysis.keywords) or state.original_question
+        query = " ".join(search_keywords) or state.original_question
         web_results = await web_search_service.search(query)
         if web_results:
             origin = Origin.WEB
@@ -470,6 +493,16 @@ async def _run_location_phase(
             "awaiting": None,
         },
     )
+
+
+def _dedupe(keywords: list[str]) -> list[str]:
+    """Order-preserving de-duplication, case-insensitive."""
+    seen: dict[str, None] = {}
+    for kw in keywords:
+        cleaned = kw.strip()
+        if cleaned:
+            seen.setdefault(cleaned.lower(), None)
+    return list(seen)
 
 
 def _assistance_payload(response: LegalAssistanceResponse) -> dict[str, Any]:
