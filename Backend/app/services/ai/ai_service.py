@@ -27,11 +27,22 @@ class AllProvidersFailedError(Exception):
 class AIService:
     def __init__(self, settings: Settings):
         self._timeout = settings.ai_timeout_seconds
-        self._providers: list[AIProvider] = []
+
+        # Order comes from config rather than being hardcoded. A provider whose
+        # quota is exhausted still costs a failed round trip on every single
+        # call before the fallback runs, so being able to demote it without a
+        # code change matters — Gemini's free tier is 20 requests/day.
+        available: dict[str, AIProvider] = {}
         if settings.has_gemini:
-            self._providers.append(GeminiProvider(settings.gemini_api_key, settings.gemini_model))
+            available["gemini"] = GeminiProvider(settings.gemini_api_key, settings.gemini_model)
         if settings.has_groq:
-            self._providers.append(GroqProvider(settings.groq_api_key, settings.groq_model))
+            available["groq"] = GroqProvider(settings.groq_api_key, settings.groq_model)
+
+        self._providers: list[AIProvider] = [
+            available.pop(name) for name in settings.ai_provider_order_list if name in available
+        ]
+        # Anything configured but not named in the order still gets used, just last.
+        self._providers.extend(available.values())
         if not self._providers:
             logger.warning(
                 "No AI provider configured (GEMINI_API_KEY and GROQ_API_KEY both empty). "

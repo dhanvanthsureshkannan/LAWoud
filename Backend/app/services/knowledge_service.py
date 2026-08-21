@@ -154,6 +154,11 @@ class KnowledgeService:
     def file_paths(self) -> list[str]:
         return [str(source.path) for source in self._sources]
 
+    @property
+    def source_summary(self) -> list[tuple[str, Path, int]]:
+        """(label, path, section_count) per source, for status and setup checks."""
+        return [(s.label, s.path, len(s.sections)) for s in self._sources]
+
     def reload_if_changed(self) -> bool:
         """Re-parse any source file that changed on disk. True if anything reloaded."""
         reloaded = any([self._reload_source(source) for source in self._sources])

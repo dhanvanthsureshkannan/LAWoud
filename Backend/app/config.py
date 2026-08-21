@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     groq_api_key: str = ""
     groq_model: str = "openai/gpt-oss-120b"
     ai_timeout_seconds: float = 30.0
+    # Try providers in this order. Put an exhausted provider last so its quota
+    # errors don't cost a failed round trip on every request.
+    ai_provider_order: str = "gemini,groq"
 
     # --- Web search ---
     tavily_api_key: str = ""
@@ -65,6 +68,10 @@ class Settings(BaseSettings):
     @property
     def lawyer_directory_path(self) -> Path:
         return self._resolve(self.lawyer_directory_file)
+
+    @property
+    def ai_provider_order_list(self) -> list[str]:
+        return [p.strip().lower() for p in self.ai_provider_order.split(",") if p.strip()]
 
     @property
     def cors_origin_list(self) -> list[str]:

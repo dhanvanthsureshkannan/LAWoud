@@ -76,15 +76,26 @@ async def check_tavily() -> None:
 
 
 def check_knowledge() -> None:
-    print("Local knowledge base:")
+    print("Local knowledge corpus:")
     ks = KnowledgeService(settings)
-    if not ks.file_exists:
-        _fail(f"file not found: {settings.knowledge_path}")
-        return
-    if ks.section_count == 0:
-        _fail(f"file exists but 0 sections parsed: {settings.knowledge_path}")
-        return
-    _ok(f"{ks.section_count} sections parsed from {settings.knowledge_path}")
+    counts = ks.section_counts
+
+    # Report each source separately. A single total hides the failure that
+    # matters most: the Constitution parsing but yielding a handful of blind
+    # chunks instead of ~473 per-Article sections.
+    for label, path, count in ks.source_summary:
+        if not path.exists():
+            _fail(f"{label}: file not found: {path}")
+        elif count == 0:
+            _fail(f"{label}: file exists but 0 sections parsed: {path}")
+        else:
+            _ok(f"{label}: {count} sections from {path.name}")
+
+    if counts.get("constitution", 0) and counts["constitution"] < 400:
+        _fail(
+            f"only {counts['constitution']} Constitution sections — expected ~473. "
+            "The per-Article parser likely did not engage."
+        )
 
 
 async def main() -> None:

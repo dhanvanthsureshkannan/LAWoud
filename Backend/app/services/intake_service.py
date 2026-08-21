@@ -106,6 +106,48 @@ _DEFAULT_FALLBACK = (
 )
 
 
+# Question words carry no topic, so they must not count towards similarity —
+# otherwise every "What ...?" looks like every other "What ...?".
+_QUESTION_NOISE = frozenset(
+    "what which who whom whose when where why how did does do is are was were "
+    "have has had you your yours the a an any some tell give say said".split()
+)
+_REPEAT_SIMILARITY = 0.6
+
+
+def _stem(word: str) -> str:
+    """Crude suffix strip, enough to see that "arresting" and "arrested" are
+    the same topic. Not linguistically correct, and does not need to be — it
+    only feeds a similarity ratio."""
+    for suffix in ("ing", "ed", "es", "s"):
+        if len(word) > len(suffix) + 2 and word.endswith(suffix):
+            return word[: -len(suffix)]
+    return word
+
+
+def _topic_words(question: str) -> set[str]:
+    return {
+        _stem(w) for w in extract_keywords(question, min_len=3) if w not in _QUESTION_NOISE
+    }
+
+
+def _is_repeat_question(candidate: str, already_asked: list[str]) -> bool:
+    """True if *candidate* asks substantially the same thing as an earlier question."""
+    new_words = _topic_words(candidate)
+    if not new_words:
+        return candidate.strip().lower() in {q.strip().lower() for q in already_asked}
+    for asked in already_asked:
+        if candidate.strip().lower() == asked.strip().lower():
+            return True
+        old_words = _topic_words(asked)
+        if not old_words:
+            continue
+        overlap = len(new_words & old_words) / len(new_words | old_words)
+        if overlap >= _REPEAT_SIMILARITY:
+            return True
+    return False
+
+
 def describes_incident(question: str) -> bool:
     """True when the user is reporting something that happened to them, rather
     than asking about the law in general."""
@@ -175,9 +217,15 @@ async def run_intake_turn(
         return result, provider
 
     # A question the model already asked would loop the user forever; drop it
-    # and answer instead of repeating ourselves.
-    if result.next_question and result.next_question in state.asked_questions:
-        logger.info("Intake repeated an earlier question; answering instead.")
+    # and answer instead of repeating ourselves. Exact matching is not enough —
+    # models reliably re-ask the same thing in different words ("What reason did
+    # the police give?" then "What offence did they say you committed?"), which
+    # reads as broken to someone who just answered it.
+    if result.next_question and _is_repeat_question(result.next_question, state.asked_questions):
+        logger.info(
+            "Intake re-asked something already covered (%r); answering instead.",
+            result.next_question[:60],
+        )
         result.sufficient = True
         result.next_question = ""
         return result, provider
