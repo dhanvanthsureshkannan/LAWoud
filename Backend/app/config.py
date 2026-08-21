@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # Try providers in this order. Put an exhausted provider last so its quota
     # errors don't cost a failed round trip on every request.
     ai_provider_order: str = "gemini,groq"
+    # Most clarifying questions the intake will ask before answering regardless.
+    # Each round is one extra model call, so lowering this is the simplest way
+    # to stretch a limited free-tier token budget.
+    max_clarification_rounds: int = 3
 
     # --- Web search ---
     tavily_api_key: str = ""

@@ -20,6 +20,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
+from app.config import settings
 from app.core.prompts import LOCATION_REQUEST_MESSAGE, build_history_text
 from app.core.text import keywords as extract_keywords
 from app.core.wording import NO_RESULTS_DISCLAIMER
@@ -199,7 +200,7 @@ async def _run_intake_and_answer(
                 "text": intake_result.next_question,
                 "question_key": intake_result.next_question_key,
                 "round": state.rounds_asked,
-                "max_rounds": 3,
+                "max_rounds": settings.max_clarification_rounds,
                 "can_skip": True,
             },
         )

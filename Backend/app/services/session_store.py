@@ -18,11 +18,11 @@ import time
 import uuid
 from dataclasses import dataclass, field
 
+from app.config import settings
 from app.models.schemas import ConversationPhase, QueryAnalysis, Route
 
 logger = logging.getLogger("lawoud.session_store")
 
-MAX_CLARIFICATION_ROUNDS = 3
 _MAX_CONVERSATIONS = 200
 _TTL_SECONDS = 60 * 60
 
@@ -53,7 +53,7 @@ class ConversationState:
 
     @property
     def can_ask_more(self) -> bool:
-        return self.rounds_asked < MAX_CLARIFICATION_ROUNDS
+        return self.rounds_asked < settings.max_clarification_rounds
 
     def record_question(self, question: str, key: str) -> None:
         self.rounds_asked += 1
